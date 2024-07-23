@@ -142,7 +142,43 @@ kv = forcing_ds['kv']
 kv_si = dimensionalize(kv, 1 / units.day)
 kv_si.plot(size=5)
 
-pdb.set_trace()
+# Thermal relaxation coefficient {form-width: "40%"}
+kt_array = forcing_ds['kt']
+levels = 30
+kt_array_si = dimensionalize(kt_array, 1 / units.day)
+p = kt_array_si.isel(lon=0).plot.contour(x='lat', y='sigma', levels=levels,
+                                         size=5, aspect=1.5)
+ax = plt.gca()
+ax.set_ylim((1, 0))
+ax.set_title('Kt at lon = 0')
+plt.colorbar(p);
+
+# Radiative equilibrium temperature {form-width: "40%"}
+teq_array = forcing_ds['eq_temp']
+teq_array_si = dimensionalize(teq_array, units.degK)
+levels = 30
+p = teq_array_si.isel(lon=0).plot.contour(x='lat', y='sigma', levels=levels,
+                                          size=5, aspect=1.5)
+ax = plt.gca()
+ax.set_ylim((1, 0));
+#plt.colorbar(p);
+
+plt.figure()
+teq_array_si.isel(lon=0).sel(lat=0., method='nearest').plot.line(y='sigma', yincrease=False)
+ax = plt.gca()
+ax.set_yscale('log')
+
+# Radiative equilibrium potential temperature {form-width: "40%"}
+temperature = dimensionalize(forcing_ds['eq_temp'], units.degK)
+surface_pressure = dimensionalize(forcing_ds['surface_pressure'], units.pascal)
+pressure = forcing_ds.sigma * surface_pressure
+kappa = dinosaur.scales.KAPPA  # kappa = R / cp, R = gas constant, cp = specific heat capacity
+potential_temperature = temperature * (pressure / p0)**-kappa
+
+plt.figure()
+potential_temperature.isel(lon=0).sel(lat=0., method='nearest').plot.line(y='sigma', yincrease=False)
+ax = plt.gca()
+ax.set_yscale('log')
 
 
 #Here's where we tell the time tintegration what equation sets to use, i.e. here a combination of the primitive equations and the hs_forcing fields

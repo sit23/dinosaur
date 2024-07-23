@@ -231,10 +231,10 @@ class LianShowmanForcing(time_integration.ExplicitODE):
   def kt(self):
     cutoff = np.maximum(0, (self.sigma - self.sigma_b) / (1 - self.sigma_b))
     return self.ka + (self.ks - self.ka) * (
-        cutoff[:, np.newaxis, np.newaxis])
+        cutoff[:, np.newaxis, np.newaxis]* (jnp.zeros_like(self.lat)+1.))
 
   def equilibrium_temperature(self, nodal_surface_pressure):
-
+    import pdb
     p_values = (
         self.sigma[:, np.newaxis, np.newaxis] * nodal_surface_pressure)
 
@@ -243,10 +243,10 @@ class LianShowmanForcing(time_integration.ExplicitODE):
     background_temp = jnp.zeros_like(p_values)
 
     where_p_higher = jnp.where(p_values>=self.p_high_taper)[0]
-    background_temp[where_p_higher] = temps_from_theta[where_p_higher]
+    background_temp = background_temp.at[where_p_higher].set(temps_from_theta[where_p_higher])
 
     where_p_lower = jnp.where(p_values<=self.p_low_taper)[0]
-    background_temp[where_p_lower] = self.const_t
+    background_temp = background_temp.at[where_p_lower].set(self.const_t)    
 
     log_p = jnp.log(p_values)
 
@@ -254,7 +254,9 @@ class LianShowmanForcing(time_integration.ExplicitODE):
 
     where_inside_taper = jnp.where(jnp.logical_not(jnp.abs(p_values-self.p_crossover)>=(self.p_crossover-self.p_low_taper)))[0]
 
-    background_temp[where_inside_taper] = jnp.exp(full_taper_func[where_inside_taper])* (p_values/self.p_crossover)**self.physics_specs.kappa
+    background_temp_inside_taper = jnp.exp(full_taper_func[where_inside_taper])* (p_values[where_inside_taper]/self.p_crossover)**self.physics_specs.kappa
+
+    background_temp = background_temp.at[where_inside_taper].set(background_temp_inside_taper)
 
     perturbations = self.dTy * np.cos(self.lat)**2
 
