@@ -114,6 +114,15 @@ class SigmaCoordinates:
     boundaries = np.linspace(0, 1, layers + 1)
     return cls(boundaries)
 
+  @classmethod
+  def equidistant_log(cls, layers: int, scale_heights :int) -> SigmaCoordinates:
+    log_boundaries = np.linspace(-scale_heights, 0, layers , endpoint=True)
+    boundaries = np.zeros(layers+1)
+    boundaries[0] = 0
+    boundaries[1:] = np.exp(log_boundaries)
+
+    return cls(boundaries)
+
   def asdict(self):
     return {k: v.tolist() for k, v in dataclasses.asdict(self).items()}
 

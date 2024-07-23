@@ -78,7 +78,7 @@ physics_specs = dinosaur.primitive_equations.PrimitiveEquationsSpecs.from_si()
 layers = 60
 coords = dinosaur.coordinate_systems.CoordinateSystem(
     horizontal=dinosaur.spherical_harmonic.Grid.T42(),
-    vertical=dinosaur.sigma_coordinates.SigmaCoordinates.equidistant(layers))
+    vertical=dinosaur.sigma_coordinates.SigmaCoordinates.equidistant_log(layers, 11))
 
 #set physical properties of system
 p0 = 25*1e5 * units.pascal
@@ -177,8 +177,6 @@ plt.figure()
 potential_temperature.isel(lon=0).sel(lat=0., method='nearest').plot.line(y='sigma', yincrease=False)
 ax = plt.gca()
 ax.set_yscale('log')
-
-pdb.set_trace()
 
 #Here's where we tell the time tintegration what equation sets to use, i.e. here a combination of the primitive equations and the hs_forcing fields
 primitive_with_hs = dinosaur.time_integration.compose_equations([primitive, hs_forcing])

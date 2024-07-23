@@ -242,21 +242,27 @@ class LianShowmanForcing(time_integration.ExplicitODE):
 
     background_temp = jnp.zeros_like(p_values)
 
-    where_p_higher = jnp.where(p_values>=self.p_high_taper)[0]
-    background_temp = background_temp.at[where_p_higher].set(temps_from_theta[where_p_higher])
+    # where_p_higher = jnp.where(p_values>=self.p_high_taper)[0]
+    # background_temp = background_temp.at[where_p_higher].set(temps_from_theta[where_p_higher])
 
-    where_p_lower = jnp.where(p_values<=self.p_low_taper)[0]
-    background_temp = background_temp.at[where_p_lower].set(self.const_t)    
+    back_temp_higher = jnp.where(p_values>=self.p_high_taper, temps_from_theta, 0.)
+    background_temp = background_temp + back_temp_higher
+
+    # where_p_lower = jnp.where(p_values<=self.p_low_taper)[0]
+    # background_temp = background_temp.at[where_p_lower].set(self.const_t)    
+
+    back_temp_lower = jnp.where(p_values<=self.p_low_taper, self.const_t, 0.)
+    background_temp = background_temp + back_temp_lower
 
     log_p = jnp.log(p_values)
 
     full_taper_func = self.coeffs[0]*(log_p**3.) + self.coeffs[1]*(log_p**2.) + self.coeffs[2]*log_p + self.coeffs[3]
 
-    where_inside_taper = jnp.where(jnp.logical_not(jnp.abs(p_values-self.p_crossover)>=(self.p_crossover-self.p_low_taper)))[0]
+    background_temp_inside_taper = jnp.exp(full_taper_func)* (p_values/self.p_crossover)**self.physics_specs.kappa
 
-    background_temp_inside_taper = jnp.exp(full_taper_func[where_inside_taper])* (p_values[where_inside_taper]/self.p_crossover)**self.physics_specs.kappa
+    back_temp_taper = jnp.where(jnp.logical_not(jnp.abs(p_values-self.p_crossover)>=(self.p_crossover-self.p_low_taper)), background_temp_inside_taper, 0.)
 
-    background_temp = background_temp.at[where_inside_taper].set(background_temp_inside_taper)
+    background_temp = background_temp + back_temp_taper
 
     perturbations = self.dTy * np.cos(self.lat)**2
 
