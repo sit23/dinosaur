@@ -74,7 +74,7 @@ units = dinosaur.scales.units
 physics_specs = dinosaur.primitive_equations.PrimitiveEquationsSpecs.from_si()
 
 #set simulation parameters
-
+exp_name = 'lian_showman_v1_1_day'
 layers = 60
 coords = dinosaur.coordinate_systems.CoordinateSystem(
     horizontal=dinosaur.spherical_harmonic.Grid.T42(),
@@ -112,8 +112,8 @@ orography = dinosaur.primitive_equations.truncated_modal_orography(
 print('now about to do some integrating')
 # Integration settings
 dt_si = 10 * units.minute #timestep
-save_every = 30 * units.day #output frequency
-total_time = 30 * units.day #total time for simulation
+save_every = 1 * units.day #output frequency
+total_time = 1 * units.day #total time for simulation
 
 inner_steps = int(save_every / dt_si) #number of steps for output
 outer_steps = int(total_time / save_every) #number of steps for entire simulation
@@ -212,3 +212,4 @@ print('finished integrating')
 
 #turn the output into an xarray dataset
 ds = trajectory_to_xarray(coords, jax.device_get(trajectory), times)
+ds.to_netcdf(f'{exp_name}.nc')
