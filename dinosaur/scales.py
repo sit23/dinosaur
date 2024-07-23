@@ -35,16 +35,16 @@ Numeric = Array | float | int
 #
 
 # The radius of the earth.
-RADIUS = 6.37122e6 * units.m
+RADIUS = 71492e3 * units.m
 
 # The rotation rate if the Earth in radians per second, often denoted Ω.
-ANGULAR_VELOCITY = OMEGA = 7.292e-5 / units.s
+ANGULAR_VELOCITY = OMEGA = 1.7585e-4 / units.s
 
 # Acceleration due to gravity on Earth.
-GRAVITY_ACCELERATION = 9.80616 * units.m / units.s ** 2
+GRAVITY_ACCELERATION = 22.88 * units.m / units.s ** 2
 
 # Specific heat capacity at constant pressure.
-ISOBARIC_HEAT_CAPACITY = 1004 * units.J / units.kilogram / units.degK
+ISOBARIC_HEAT_CAPACITY = 13e3 * units.J / units.kilogram / units.degK
 
 # Specific heat capacity of water vapor at constant pressure.
 # value taken for T=275 from:
@@ -58,7 +58,7 @@ MASS_OF_DRY_ATMOSPHERE = 5.18e18 * units.kg
 # a diatomic ideal gas, often denoted κ. This value corresponds to a heat
 # capacity ratio ɣ = 7 / 5. Note that this quantity is dimensionless, and this
 # "unit" is included for consistency with other constants.
-KAPPA = 2 / 7 * units.dimensionless
+KAPPA = 0.29 * units.dimensionless
 
 # The Latent Heat of Vaporization for water assuming T = 273.15 K
 # Used to calculate enthalpy and MSE budgets as well as other moisture values
@@ -79,7 +79,7 @@ T_FREEZING = 273.15 * units.degK
 
 # Pressure of one atmosphere (standard pressure)
 # used to calculate potential temperature away from surface
-REFERENCE_PRESSURE = 101325. *units.pascal
+REFERENCE_PRESSURE = 25.*1e5 *units.pascal
 
 # Density of water in SI units
 WATER_DENSITY = 997 * units.kg / units.m ** 3
