@@ -21,23 +21,31 @@ def trajectory_to_xarray(coords, trajectory, times):
   trajectory_dict, _ = dinosaur.pytree_utils.as_dict(trajectory)
   u, v = dinosaur.spherical_harmonic.vor_div_to_uv_nodal(
       coords.horizontal, trajectory.vorticity, trajectory.divergence)
-  trajectory_dict.update({'u': u, 'v': v})
+
+  u_dim = dimensionalize(u, units.meter/units.second)
+  v_dim = dimensionalize(v, units.meter/units.second)
+  vort_dim = dimensionalize(trajectory.vorticity, 1./units.second)
+  div_dim  = dimensionalize(trajectory.divergence, 1./units.second)
+
+
+  trajectory_dict.update({'u': u_dim, 'v': v_dim, 'vorticity':vort_dim, 'divergence':div_dim})
   nodal_trajectory_fields = dinosaur.coordinate_systems.maybe_to_nodal(
       trajectory_dict, coords=coords)
   trajectory_ds = dinosaur.xarray_utils.data_to_xarray(
       nodal_trajectory_fields, coords=coords, times=times)
 
-  trajectory_ds['surface_pressure'] = np.exp(trajectory_ds.log_surface_pressure[:, 0, :,:])
+  trajectory_ds['surface_pressure'] = dimensionalize(np.exp(trajectory_ds.log_surface_pressure[:, 0, :,:]), units.pascal)
+
   temperature = dinosaur.xarray_utils.temperature_variation_to_absolute(
       trajectory_ds.temperature_variation.data, ref_temps)
   trajectory_ds = trajectory_ds.assign(
-      temperature=(trajectory_ds.temperature_variation.dims, temperature))
+      temperature=(trajectory_ds.temperature_variation.dims, dimensionalize(temperature, units.degK)))
 
   total_layer_ke = coords.horizontal.integrate(u**2 + v**2)
   total_ke_cumulative = dinosaur.sigma_coordinates.cumulative_sigma_integral(
       total_layer_ke, coords.vertical, axis=-1)
   total_ke = total_ke_cumulative[..., -1]
-  trajectory_ds = trajectory_ds.assign(total_kinetic_energy=(('time'), total_ke))
+  trajectory_ds = trajectory_ds.assign(total_kinetic_energy=(('time'), dimensionalize(total_ke, units.meter**2/units.second**2)))
   return trajectory_ds
 
 def ds_held_suarez_forcing(coords, hs):
@@ -74,7 +82,7 @@ units = dinosaur.scales.units
 physics_specs = dinosaur.primitive_equations.PrimitiveEquationsSpecs.from_si()
 
 #set simulation parameters
-exp_name = 'lian_showman_v1_1_day'
+exp_name = 'lian_showman_v1_1_day_short'
 layers = 60
 coords = dinosaur.coordinate_systems.CoordinateSystem(
     horizontal=dinosaur.spherical_harmonic.Grid.T42(),
