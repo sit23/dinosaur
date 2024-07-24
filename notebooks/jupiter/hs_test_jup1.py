@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import xarray
 import pdb
 import time
+import os
 
 units = dinosaur.scales.units
 
@@ -83,6 +84,15 @@ physics_specs = dinosaur.primitive_equations.PrimitiveEquationsSpecs.from_si()
 
 #set simulation parameters
 exp_name = 'lian_showman_v1_1_day_short'
+output_file_name = f'{exp_name}.nc'
+overwrite_existing_data = False
+
+if os.path.isfile(output_file_name): 
+  if overwrite_existing_data:
+    raise FileExistsError('Output file already exists and overwriting is disabled - stopping')
+  else:
+    raise RuntimeWarning('Output file already exists and overwriting is ENABLED - continuing')
+  
 layers = 60
 coords = dinosaur.coordinate_systems.CoordinateSystem(
     horizontal=dinosaur.spherical_harmonic.Grid.T42(),
