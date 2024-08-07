@@ -668,10 +668,14 @@ def _vertical_pad(
 ) -> tuple[jax.Array, int | None]:
   if field.ndim < 3 or field.shape[0] == 1 or mesh is None:
     return field, None
-  assert field.ndim == 3, field.shape
+  assert field.shape
   z_multiple = mesh.shape['z']
   z_padding = _round_to_multiple(field.shape[0], z_multiple) - field.shape[0]
-  return jnp.pad(field, [(0, z_padding), (0, 0), (0, 0)]), z_padding
+  if field.ndim==3:
+    padded_field = jnp.pad(field, [(0, z_padding), (0, 0), (0, 0)])
+  else:
+    padded_field = jnp.pad(field, [(0, 0), (0, z_padding), (0, 0), (0, 0)])
+  return padded_field, z_padding
 
 
 def _vertical_crop(field: jax.Array, padding: int | None) -> jax.Array:
