@@ -334,7 +334,7 @@ def _fourier_derivative_for_real_basis_with_zero_imag(
     return fourier.real_basis_derivative_with_zero_imag(
         u, axis, frequency_offset
     )
-
+  pdb.set_trace()
   assert x.ndim in {2, 3}, x.shape
   z = None if x.shape[0] == 1 else 'z'
   spec = P(z, 'x', 'y') if x.ndim == 3 else P('x', 'y')
@@ -370,6 +370,8 @@ def _transform_einsum(
     in_spec = P(z, None, 'x', 'y') if rhs.ndim == 4 else P(z, 'x', 'y')
     out_spec = P(z, None, 'x', 'y') if out_ndim == 4 else P(z, 'x', 'y')
   else:
+    import pdb
+    pdb.set_trace()
     raise ValueError(f'only 0 or 1 dimensions supported for ...: {subscripts}')
 
   return jax_numpy_utils.sharded_einsum(
