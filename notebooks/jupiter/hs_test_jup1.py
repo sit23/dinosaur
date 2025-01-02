@@ -1,5 +1,6 @@
 import functools
 import jax
+from jax.experimental import mesh_utils
 import dinosaur
 import numpy as np
 import matplotlib.pyplot as plt
@@ -42,11 +43,11 @@ def trajectory_to_xarray(coords, trajectory, times):
   trajectory_ds = trajectory_ds.assign(
       temperature=(trajectory_ds.temperature_variation.dims, dimensionalize(temperature, units.degK)))
 
-  total_layer_ke = coords.horizontal.integrate(u**2 + v**2)
-  total_ke_cumulative = dinosaur.sigma_coordinates.cumulative_sigma_integral(
-      total_layer_ke, coords.vertical, axis=-1)
-  total_ke = total_ke_cumulative[..., -1]
-  trajectory_ds = trajectory_ds.assign(total_kinetic_energy=(('time'), dimensionalize(total_ke, units.meter**2/units.second**2)))
+#  total_layer_ke = coords.horizontal.integrate(u**2 + v**2)
+#  total_ke_cumulative = dinosaur.sigma_coordinates.cumulative_sigma_integral(
+#      total_layer_ke, coords.vertical, axis=-1)
+#  total_ke = total_ke_cumulative[..., -1]
+#  trajectory_ds = trajectory_ds.assign(total_kinetic_energy=(('time'), dimensionalize(total_ke, units.meter**2/units.second**2)))
   return trajectory_ds
 
 def ds_held_suarez_forcing(coords, hs):
@@ -78,12 +79,14 @@ def linspace_step(start, stop, step):
 
 print('welcome to dinosaur')
 # Resolution
+os.environ['XLA_FLAGS'] = '--xla_force_host_platform_device_count=4'
+print(jax.devices())
 
 units = dinosaur.scales.units
 physics_specs = dinosaur.primitive_equations.PrimitiveEquationsSpecs.from_si()
 
 #set simulation parameters
-exp_name = 'lian_showman_v1_1_day_short'
+exp_name = 'lian_showman_v1_1_day_short_T85_4_dev2'
 output_file_name = f'{exp_name}.nc'
 overwrite_existing_data = False
 
@@ -92,11 +95,21 @@ if os.path.isfile(output_file_name):
     raise FileExistsError('Output file already exists and overwriting is disabled - stopping')
   else:
     raise RuntimeWarning('Output file already exists and overwriting is ENABLED - continuing')
-  
+
+mesh_devices = mesh_utils.create_device_mesh((1, 4, 1))
+mesh = jax.sharding.Mesh(mesh_devices, ['z', 'x', 'y'])
+
+max_wavenumber=85
 layers = 60
 coords = dinosaur.coordinate_systems.CoordinateSystem(
-    horizontal=dinosaur.spherical_harmonic.Grid.T42(),
-    vertical=dinosaur.sigma_coordinates.SigmaCoordinates.equidistant_log(layers, 11))
+    horizontal=dinosaur.spherical_harmonic.Grid.with_wavenumbers(
+        longitude_wavenumbers=max_wavenumber,
+        spherical_harmonics_impl=dinosaur.spherical_harmonic.RealSphericalHarmonicsWithZeroImag,
+        dealiasing='quadratic',
+    ),
+    vertical=dinosaur.sigma_coordinates.SigmaCoordinates.equidistant_log(layers, 11),
+    spmd_mesh=mesh
+    )
 
 #set physical properties of system
 p0 = 25*1e5 * units.pascal

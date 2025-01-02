@@ -334,8 +334,10 @@ def _fourier_derivative_for_real_basis_with_zero_imag(
     return fourier.real_basis_derivative_with_zero_imag(
         u, axis, frequency_offset
     )
-  pdb.set_trace()
   assert x.ndim in {2, 3}, x.shape
+  # if x.ndim not in {2, 3}:
+  #   import pdb
+  #   pdb.set_trace()
   z = None if x.shape[0] == 1 else 'z'
   spec = P(z, 'x', 'y') if x.ndim == 3 else P('x', 'y')
   # TODO(shoyer): understand why this bogus check_rep=False is necessary to

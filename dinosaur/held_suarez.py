@@ -118,9 +118,17 @@ class HeldSuarezForcing(time_integration.ExplicitODE):
 
     # Nodal velocity tendencies
     # "velocity" here is `velocity / cos(lat)`
-    nodal_velocity = (
-        jnp.stack(aux_state.cos_lat_u) / self.coords.horizontal.cos_lat**2)
-    nodal_velocity_tendency = -self.kv() * nodal_velocity
+
+    nodal_velocity_0 = (
+        aux_state.cos_lat_u[0] / self.coords.horizontal.cos_lat**2)
+    nodal_velocity_tendency_0 = -self.kv() * nodal_velocity_0
+    nodal_velocity_1 = (
+        aux_state.cos_lat_u[1] / self.coords.horizontal.cos_lat**2)
+    nodal_velocity_tendency_1 = -self.kv() * nodal_velocity_1
+
+    # nodal_velocity = (
+    #     jnp.stack(aux_state.cos_lat_u) / self.coords.horizontal.cos_lat**2)
+    # nodal_velocity_tendency = -self.kv() * nodal_velocity
 
     # Nodal temperature tendency
     nodal_temperature = (
@@ -135,7 +143,12 @@ class HeldSuarezForcing(time_integration.ExplicitODE):
     # Convert to modal
     temperature_tendency = self.coords.horizontal.to_modal(
         nodal_temperature_tendency)
-    velocity_tendency = self.coords.horizontal.to_modal(nodal_velocity_tendency)
+
+    velocity_tendency_0 = self.coords.horizontal.to_modal(nodal_velocity_tendency_0)
+    velocity_tendency_1 = self.coords.horizontal.to_modal(nodal_velocity_tendency_1)    
+
+    velocity_tendency = (velocity_tendency_0, velocity_tendency_1)
+    
     vorticity_tendency = self.coords.horizontal.curl_cos_lat(velocity_tendency)
     divergence_tendency = self.coords.horizontal.div_cos_lat(velocity_tendency)
 
@@ -279,9 +292,12 @@ class LianShowmanForcing(time_integration.ExplicitODE):
 
     # Nodal velocity tendencies
     # "velocity" here is `velocity / cos(lat)`
-    nodal_velocity = (
-        jnp.stack(aux_state.cos_lat_u) / self.coords.horizontal.cos_lat**2)
-    nodal_velocity_tendency = -self.kv() * nodal_velocity
+    nodal_velocity_0 = (
+        aux_state.cos_lat_u[0] / self.coords.horizontal.cos_lat**2)
+    nodal_velocity_tendency_0 = -self.kv() * nodal_velocity_0
+    nodal_velocity_1 = (
+        aux_state.cos_lat_u[1] / self.coords.horizontal.cos_lat**2)
+    nodal_velocity_tendency_1 = -self.kv() * nodal_velocity_1
 
     # Nodal temperature tendency
     nodal_temperature = (
@@ -296,7 +312,12 @@ class LianShowmanForcing(time_integration.ExplicitODE):
     # Convert to modal
     temperature_tendency = self.coords.horizontal.to_modal(
         nodal_temperature_tendency)
-    velocity_tendency = self.coords.horizontal.to_modal(nodal_velocity_tendency)
+
+    velocity_tendency_0 = self.coords.horizontal.to_modal(nodal_velocity_tendency_0)
+    velocity_tendency_1 = self.coords.horizontal.to_modal(nodal_velocity_tendency_1)    
+
+    velocity_tendency = (velocity_tendency_0, velocity_tendency_1)
+
     vorticity_tendency = self.coords.horizontal.curl_cos_lat(velocity_tendency)
     divergence_tendency = self.coords.horizontal.div_cos_lat(velocity_tendency)
 
