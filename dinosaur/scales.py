@@ -33,18 +33,24 @@ Numeric = Array | float | int
 #
 # Physical constants.
 #
+# NOTE: this branch (`jupiter-gpu`) overrides the module-level defaults below
+# with Jupiter values, since `SimUnits.from_si()` (and thus
+# `PrimitiveEquationsSpecs.from_si()`) defaults to these module attributes.
+# Any code on this branch that relies on the *default* `from_si()` constants
+# (e.g. the Earth-based demo notebooks inherited from upstream) will get
+# Jupiter's constants unless it passes explicit `*_si` overrides.
 
-# The radius of the earth.
-RADIUS = 6.37122e6 * units.m  # pyrefly: ignore[unsupported-operation]
+# The radius of Jupiter.
+RADIUS = 71492e3 * units.m  # pyrefly: ignore[unsupported-operation]
 
-# The rotation rate if the Earth in radians per second, often denoted Ω.
-ANGULAR_VELOCITY = OMEGA = 7.292e-5 / units.s  # pyrefly: ignore[unsupported-operation]
+# Jupiter's rotation rate in radians per second, often denoted Ω.
+ANGULAR_VELOCITY = OMEGA = 1.7585e-4 / units.s  # pyrefly: ignore[unsupported-operation]
 
-# Acceleration due to gravity on Earth.
-GRAVITY_ACCELERATION = 9.80616 * units.m / units.s**2  # pyrefly: ignore[unsupported-operation]
+# Acceleration due to gravity on Jupiter.
+GRAVITY_ACCELERATION = 22.88 * units.m / units.s**2  # pyrefly: ignore[unsupported-operation]
 
-# Specific heat capacity at constant pressure.
-ISOBARIC_HEAT_CAPACITY = 1004 * units.J / units.kilogram / units.degK  # pyrefly: ignore[unsupported-operation]
+# Specific heat capacity of Jupiter's H2/He atmosphere at constant pressure.
+ISOBARIC_HEAT_CAPACITY = 13e3 * units.J / units.kilogram / units.degK  # pyrefly: ignore[unsupported-operation]
 
 # Specific heat capacity of water vapor at constant pressure.
 # value taken for T=275 from:
@@ -54,11 +60,11 @@ WATER_VAPOR_CP = 1859 * units.J / units.kilogram / units.degK  # pyrefly: ignore
 # The mass of the dry atmosphere.
 MASS_OF_DRY_ATMOSPHERE = 5.18e18 * units.kg  # pyrefly: ignore[unsupported-operation]
 
-# The ratio of the ideal gas constant to the isobaric specific heat capacity of
-# a diatomic ideal gas, often denoted κ. This value corresponds to a heat
-# capacity ratio ɣ = 7 / 5. Note that this quantity is dimensionless, and this
-# "unit" is included for consistency with other constants.
-KAPPA = 2 / 7 * units.dimensionless  # pyrefly: ignore[unsupported-operation]
+# The ratio of the ideal gas constant to the isobaric specific heat capacity.
+# Jupiter's H2/He atmosphere gives kappa ~ 0.29 (vs. 2/7 ~ 0.286 for Earth's
+# diatomic air). Note that this quantity is dimensionless, and this "unit" is
+# included for consistency with other constants.
+KAPPA = 0.29 * units.dimensionless  # pyrefly: ignore[unsupported-operation]
 
 # The Latent Heat of Vaporization for water assuming T = 273.15 K
 # Used to calculate enthalpy and MSE budgets as well as other moisture values
