@@ -124,6 +124,26 @@ class SigmaCoordinates:
     return cls(boundaries)
 
   @classmethod
+  def equidistant_log(cls, layers: int, scale_heights: int) -> SigmaCoordinates:
+    """Sigma levels equally spaced in log(sigma) over `scale_heights`.
+
+    Unlike `equidistant`, which spaces levels evenly in sigma, this
+    concentrates levels near the top of the domain (small sigma) to better
+    resolve deep, high-pressure atmospheres such as Jupiter's, following the
+    log-pressure spacing used in Lian & Showman.
+
+    Args:
+      layers: number of vertical layers.
+      scale_heights: number of e-folding (log-sigma) scale heights spanned
+        between the top boundary and sigma=1.
+    """
+    log_boundaries = np.linspace(-scale_heights, 0, layers, endpoint=True)
+    boundaries = np.zeros(layers + 1)
+    boundaries[0] = 0
+    boundaries[1:] = np.exp(log_boundaries)
+    return cls(boundaries)
+
+  @classmethod
   def from_centers(cls, centers: np.typing.ArrayLike):
     """Create sigma coordinates from the centers of each layer."""
     # The relationship between cell centers and boundaries is given by:

@@ -16,6 +16,7 @@
 
 import dinosaur.coordinate_systems
 import dinosaur.filtering
+import dinosaur.grey_radiation
 import dinosaur.held_suarez
 import dinosaur.horizontal_interpolation
 import dinosaur.jax_numpy_utils

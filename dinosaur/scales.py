@@ -82,6 +82,11 @@ IDEAL_GAS_CONSTANT_H20 = 461.0 * units.J / units.kilogram / units.degK  # pyrefl
 # Density of liquid water.
 WATER_DENSITY = 997 * units.kg / units.m**3  # pyrefly: ignore[unsupported-operation]
 
+# Stefan-Boltzmann constant, used by grey-radiation longwave schemes.
+STEFAN_BOLTZMANN = (
+    5.670374e-8 * units.W / units.m**2 / units.degK**4
+)  # pyrefly: ignore[unsupported-operation]
+
 
 #
 # Code for defining scales and non-dimensionalizing quantities.
