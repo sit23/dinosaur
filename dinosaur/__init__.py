@@ -15,6 +15,7 @@
 """Defines the dinosaur module."""
 
 import dinosaur.coordinate_systems
+import dinosaur.dry_convection
 import dinosaur.filtering
 import dinosaur.grey_radiation
 import dinosaur.held_suarez
