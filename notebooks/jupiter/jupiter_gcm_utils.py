@@ -194,3 +194,199 @@ def run_integration(
       coords, physics_specs, jax.device_get(trajectory), times, ref_temps
   )
   return final_state, ds, elapsed
+
+
+def build_model_equations(
+    model_name: str,
+    coords: 'dinosaur.coordinate_systems.CoordinateSystem',
+    physics_specs: 'dinosaur.units.SimUnitsProtocol',
+    ref_temps: np.ndarray,
+    orography,
+    p0: 'units.Quantity',
+):
+  """Builds the `[primitive, forcing(s)]` equations list for a named model."""
+  primitive = dinosaur.primitive_equations.PrimitiveEquations(
+      ref_temps, orography, coords, physics_specs
+  )
+  if model_name == 'lian_showman':
+    forcing = dinosaur.held_suarez.LianShowmanForcing(
+        coords=coords,
+        physics_specs=physics_specs,
+        reference_temperature=ref_temps,
+        p0=p0,
+    )
+    return [primitive, forcing]
+  elif model_name == 'grey_radiation':
+    radiation = dinosaur.grey_radiation.GiantPlanetGreyRadiation(
+        coords=coords,
+        physics_specs=physics_specs,
+        reference_temperature=ref_temps,
+        p0=p0,
+    )
+    convection = dinosaur.dry_convection.DryConvectiveAdjustment(
+        coords=coords,
+        physics_specs=physics_specs,
+        reference_temperature=ref_temps,
+    )
+    return [primitive, radiation, convection]
+  else:
+    raise ValueError(f'unknown model_name {model_name!r}')
+
+
+def benchmark_resolution(
+    model_name: str,
+    max_wavenumber: int,
+    gaussian_nodes: int,
+    dt_si: 'units.Quantity',
+    p0: 'units.Quantity' = 25e5 * units.pascal,
+    layers: int = 60,
+    scale_heights: int = 11,
+    benchmark_steps: int = 30,
+    filter_tau: float = 0.0087504,
+    filter_order: float = 1.5,
+    filter_cutoff: float = 0.8,
+) -> dict:
+  """Benchmarks ms/step for one model at one horizontal resolution.
+
+  Times a single compiled `benchmark_steps`-step advance, called twice: the
+  first call triggers JIT compilation (untimed), the second reuses the
+  compiled executable and is what's timed -- so this measures steady-state
+  execution throughput, not one-off compile cost.
+
+  Returns a dict of results; on failure (e.g. GPU OOM at high resolution)
+  `result['error']` is set and `result['ms_per_step']` is `None` -- callers
+  doing a resolution sweep should stop escalating resolution when this
+  happens rather than trying successively larger (and slower-to-fail)
+  resolutions.
+  """
+  result = {
+      'model': model_name,
+      'max_wavenumber': max_wavenumber,
+      'gaussian_nodes': gaussian_nodes,
+      'dt_si_seconds': dt_si.to(units.second).magnitude,
+      'ms_per_step': None,
+      'error': None,
+  }
+  try:
+    horizontal = dinosaur.spherical_harmonic.Grid.construct(
+        max_wavenumber=max_wavenumber, gaussian_nodes=gaussian_nodes
+    )
+    vertical = dinosaur.sigma_coordinates.SigmaCoordinates.equidistant_log(
+        layers, scale_heights
+    )
+    coords = dinosaur.coordinate_systems.CoordinateSystem(
+        horizontal=horizontal, vertical=vertical
+    )
+    result['longitude_nodes'] = horizontal.longitude_nodes
+    result['latitude_nodes'] = horizontal.latitude_nodes
+
+    physics_specs = (
+        dinosaur.primitive_equations.PrimitiveEquationsSpecs.from_si()
+    )
+    state, ref_temps, orography = initial_state(coords, physics_specs, p0=p0)
+    equations = dinosaur.time_integration.compose_equations(
+        build_model_equations(
+            model_name, coords, physics_specs, ref_temps, orography, p0
+        )
+    )
+
+    dt = physics_specs.nondimensionalize(dt_si)
+    step_fn = dinosaur.time_integration.imex_rk_sil3(equations, dt)
+    filters = [
+        dinosaur.time_integration.exponential_step_filter(
+            coords.horizontal,
+            dt,
+            tau=filter_tau,
+            order=filter_order,
+            cutoff=filter_cutoff,
+        ),
+    ]
+    step_fn = dinosaur.time_integration.step_with_filters(step_fn, filters)
+    advance_fn = jax.jit(
+        dinosaur.time_integration.trajectory_from_step(
+            step_fn, outer_steps=1, inner_steps=benchmark_steps
+        )
+    )
+
+    jax.block_until_ready(advance_fn(state))  # compile, untimed
+    start = time.time()
+    jax.block_until_ready(advance_fn(state))  # timed, reuses compiled cache
+    elapsed = time.time() - start
+
+    result['ms_per_step'] = elapsed / benchmark_steps * 1000
+    result['benchmark_wall_seconds'] = elapsed
+  except Exception as e:  # pylint: disable=broad-except
+    result['error'] = f'{type(e).__name__}: {e}'
+  return result
+
+
+def implied_wall_time(
+    result: dict, total_time_si: 'units.Quantity' = 3 * units.day
+) -> float | None:
+  """Implied wall-clock seconds to simulate `total_time_si` at this resolution.
+
+  Extrapolated from `benchmark_resolution`'s steady-state ms/step, rather
+  than actually run to `total_time_si` -- at high resolution the step count
+  needed (with a CFL-limited timestep) makes a literal run impractically
+  slow, and per-step cost is stable enough that a short benchmark is
+  representative.
+  """
+  if result.get('ms_per_step') is None:
+    return None
+  n_steps = int(
+      np.ceil(total_time_si.to(units.second).magnitude / result['dt_si_seconds'])
+  )
+  return result['ms_per_step'] * n_steps / 1000
+
+
+def resolution_scaling_sweep(
+    model_name: str,
+    resolutions: list[tuple[int, int, 'units.Quantity']],
+    p0: 'units.Quantity' = 25e5 * units.pascal,
+    layers: int = 60,
+    scale_heights: int = 11,
+    total_time_si: 'units.Quantity' = 3 * units.day,
+    benchmark_steps: int = 30,
+) -> list[dict]:
+  """Benchmarks `model_name` over increasing resolutions, stopping on failure.
+
+  Args:
+    model_name: 'lian_showman' or 'grey_radiation'.
+    resolutions: `(max_wavenumber, gaussian_nodes, dt_si)` tuples in
+      increasing-resolution order; `dt_si` should be halved each time
+      resolution doubles to keep the CFL number roughly constant.
+    total_time_si: simulated duration each resolution's implied wall time is
+      extrapolated to.
+    benchmark_steps: number of steps actually timed at each resolution.
+
+  Returns:
+    List of result dicts, one per resolution attempted (including the first
+    failure, if any, with `error` set and `ms_per_step`/implied time `None`).
+  """
+  results = []
+  for max_wavenumber, gaussian_nodes, dt_si in resolutions:
+    print(
+        f'{model_name}: max_wavenumber={max_wavenumber}, '
+        f'gaussian_nodes={gaussian_nodes}, dt={dt_si}'
+    )
+    result = benchmark_resolution(
+        model_name,
+        max_wavenumber,
+        gaussian_nodes,
+        dt_si,
+        p0=p0,
+        layers=layers,
+        scale_heights=scale_heights,
+        benchmark_steps=benchmark_steps,
+    )
+    result['implied_wall_seconds'] = implied_wall_time(result, total_time_si)
+    results.append(result)
+    if result['error'] is not None:
+      print(f'  FAILED: {result["error"]}')
+      print('  stopping sweep: further resolutions would likely also fail')
+      break
+    print(
+        f'  ms/step={result["ms_per_step"]:.2f}, '
+        f'implied wall time={result["implied_wall_seconds"]:.1f}s'
+    )
+  return results
