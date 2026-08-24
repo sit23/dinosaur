@@ -220,6 +220,20 @@ def build_model_equations(
         p0=p0,
     )
     return [primitive, forcing]
+  elif model_name == 'held_suarez':
+    # Standard (Earth-parameterized) Held-Suarez forcing -- kf/ka/ks/minT/
+    # maxT/dTy/dThz/sigma_b are left at their canonical defaults on purpose;
+    # only p0 is overridden, so the forcing's "surface" (sigma=1) lines up
+    # with this model's actual surface pressure instead of Earth's ~1e5 Pa.
+    # This isolates the dynamical core (with Jupiter's radius/rotation/
+    # gravity) from the Lian-Showman forcing's specific structure.
+    forcing = dinosaur.held_suarez.HeldSuarezForcingSigma(
+        coords=coords,
+        physics_specs=physics_specs,
+        reference_temperature=ref_temps,
+        p0=p0,
+    )
+    return [primitive, forcing]
   elif model_name == 'grey_radiation':
     radiation = dinosaur.grey_radiation.GiantPlanetGreyRadiation(
         coords=coords,
