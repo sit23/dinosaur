@@ -494,6 +494,7 @@ def run_integration_chunked(
     save_every: 'units.Quantity' = 1 * units.day,
     checkpoint_every: 'units.Quantity' = 50 * units.day,
     total_time: 'units.Quantity' = 1000 * units.day,
+    filter_type: str = 'exponential',
     filter_tau: float = 0.0087504,
     filter_order: float = 1.5,
     filter_cutoff: float = 0.8,
@@ -536,6 +537,13 @@ def run_integration_chunked(
       progress is flushed to disk. Must be an exact multiple of `save_every`.
     total_time: total simulated duration. Must be an exact multiple of
       `checkpoint_every`.
+    filter_type: 'exponential' (default -- damping is a function of
+      normalized total wavenumber k=l/lmax, zero below `filter_cutoff`) or
+      'horizontal_diffusion' (a del^(2*filter_order) hyperdiffusion, the
+      same style Isca's spectral core uses as its sole horizontal damping:
+      a pure power law in the actual Laplacian eigenvalue, no cutoff --
+      every wavenumber is damped, `filter_tau` is the e-folding time at the
+      truncation limit and `filter_cutoff` is ignored).
     filter_tau, filter_order, filter_cutoff: spectral filter parameters.
     resume: if `True` (default) and a matching checkpoint exists, continue
       from it instead of starting over.
@@ -575,6 +583,7 @@ def run_integration_chunked(
       'longitude_nodes': coords.horizontal.longitude_nodes,
       'latitude_nodes': coords.horizontal.latitude_nodes,
       'layers': coords.vertical.layers,
+      'filter_type': filter_type,
   }
 
   start_chunk = 0
@@ -608,15 +617,27 @@ def run_integration_chunked(
 
   dt = physics_specs.nondimensionalize(dt_si)
   step_fn = dinosaur.time_integration.imex_rk_sil3(equations, dt)
-  filters = [
-      dinosaur.time_integration.exponential_step_filter(
-          coords.horizontal,
-          dt,
-          tau=filter_tau,
-          order=filter_order,
-          cutoff=filter_cutoff,
-      ),
-  ]
+  if filter_type == 'exponential':
+    filters = [
+        dinosaur.time_integration.exponential_step_filter(
+            coords.horizontal,
+            dt,
+            tau=filter_tau,
+            order=filter_order,
+            cutoff=filter_cutoff,
+        ),
+    ]
+  elif filter_type == 'horizontal_diffusion':
+    filters = [
+        dinosaur.time_integration.horizontal_diffusion_step_filter(
+            coords.horizontal,
+            dt,
+            tau=filter_tau,
+            order=filter_order,
+        ),
+    ]
+  else:
+    raise ValueError(f'unknown filter_type {filter_type!r}')
   step_fn = dinosaur.time_integration.step_with_filters(step_fn, filters)
   advance_chunk = jax.jit(
       dinosaur.time_integration.trajectory_from_step(
