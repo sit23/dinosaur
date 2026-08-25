@@ -207,8 +207,15 @@ def build_model_equations(
     ref_temps: np.ndarray,
     orography,
     p0: 'units.Quantity',
+    forcing_kwargs: dict | None = None,
 ):
-  """Builds the `[primitive, forcing(s)]` equations list for a named model."""
+  """Builds the `[primitive, forcing(s)]` equations list for a named model.
+
+  `forcing_kwargs`, if given, are passed through to the forcing's
+  constructor (in addition to `p0`) -- e.g. to override `dTy` on
+  `held_suarez` without otherwise touching its canonical defaults.
+  """
+  forcing_kwargs = forcing_kwargs or {}
   primitive = dinosaur.primitive_equations.PrimitiveEquations(
       ref_temps, orography, coords, physics_specs
   )
@@ -218,20 +225,23 @@ def build_model_equations(
         physics_specs=physics_specs,
         reference_temperature=ref_temps,
         p0=p0,
+        **forcing_kwargs,
     )
     return [primitive, forcing]
   elif model_name == 'held_suarez':
     # Standard (Earth-parameterized) Held-Suarez forcing -- kf/ka/ks/minT/
-    # maxT/dTy/dThz/sigma_b are left at their canonical defaults on purpose;
-    # only p0 is overridden, so the forcing's "surface" (sigma=1) lines up
-    # with this model's actual surface pressure instead of Earth's ~1e5 Pa.
-    # This isolates the dynamical core (with Jupiter's radius/rotation/
-    # gravity) from the Lian-Showman forcing's specific structure.
+    # maxT/dTy/dThz/sigma_b are left at their canonical defaults unless
+    # overridden via forcing_kwargs; only p0 is overridden by default, so
+    # the forcing's "surface" (sigma=1) lines up with this model's actual
+    # surface pressure instead of Earth's ~1e5 Pa. This isolates the
+    # dynamical core (with Jupiter's radius/rotation/gravity) from the
+    # Lian-Showman forcing's specific structure.
     forcing = dinosaur.held_suarez.HeldSuarezForcingSigma(
         coords=coords,
         physics_specs=physics_specs,
         reference_temperature=ref_temps,
         p0=p0,
+        **forcing_kwargs,
     )
     return [primitive, forcing]
   elif model_name == 'grey_radiation':
