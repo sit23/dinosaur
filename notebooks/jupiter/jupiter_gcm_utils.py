@@ -6,6 +6,7 @@ way; this module factors that out so the notebooks can focus on the physics
 that differs between them.
 """
 
+import dataclasses
 import functools
 import glob
 import json
@@ -471,6 +472,71 @@ def load_checkpoint(
   return state, metadata
 
 
+def per_field_horizontal_diffusion_step_filter(
+    grid: 'dinosaur.spherical_harmonic.Grid',
+    dt: float,
+    tau: float,
+    order: int,
+    field_name: str,
+):
+  """Like `dinosaur.time_integration.horizontal_diffusion_step_filter`, but
+  damps only one named field of `primitive_equations.State`, leaving the
+  rest of the state untouched.
+
+  dinosaur's own `horizontal_diffusion_filter` applies its scaling to every
+  leaf of the state pytree with a matching shape -- in practice, vorticity,
+  divergence and temperature_variation all get hit with the *same*
+  (tau, order), since we've only ever called it once per step. SPEEDY/ECHAM/
+  jax-gcm instead run three independent filters, one per field, with
+  divergence damped much harder (short tau, low/del^2 order -- it's the
+  field most directly coupled to fast gravity-wave/numerical noise) than
+  vorticity and temperature (longer tau, higher/del^4 order, to avoid
+  smearing the actual balanced circulation). This is that per-field version;
+  call it three times (once per field) and pass all three to
+  `step_with_filters`.
+
+  Args:
+    grid: the `spherical_harmonic.Grid` to use for the computation.
+    dt: size of the time step to be used for each filter application.
+    tau: timescale over which the top mode decreases by a factor of e^-1.
+    order: polynomial order of the filter (1 = del^2, 2 = del^4, ...).
+    field_name: which `State` field to damp, e.g. 'divergence', 'vorticity',
+      'temperature_variation'.
+
+  Returns:
+    A function that accepts `(u, u_next)` and returns `u_next` with only
+    `field_name` replaced by its filtered value.
+  """
+  eigenvalues = grid.laplacian_eigenvalues
+  scale = dt / (tau * abs(eigenvalues[-1]) ** order)
+  scaling = jnp.exp(-scale * (-eigenvalues) ** order)
+
+  def filter_fn(u, u_next):
+    del u  # unused
+    old_value = getattr(u_next, field_name)
+    new_value = scaling * old_value
+    return dataclasses.replace(u_next, **{field_name: new_value})
+
+  return filter_fn
+
+
+def conserve_global_mean_ps_step_filter():
+  """Resets the global-mean (l=0, m=0) mode of log_surface_pressure to its
+  pre-step value after every filter application, preventing spurious mass
+  drift from repeated spectral filtering. Ported from jax-gcm's
+  `_conserve_global_mean_ps` (jcm/dycore/dinosaur/dycore.py); cheap, and
+  unrelated to the polar-instability mechanism specifically, but good
+  hygiene for a long integration and easy to add alongside the real fix.
+  """
+  def filter_fn(u, u_next):
+    new_lsp = u_next.log_surface_pressure.at[..., 0, 0].set(
+        u.log_surface_pressure[..., 0, 0]
+    )
+    return dataclasses.replace(u_next, log_surface_pressure=new_lsp)
+
+  return filter_fn
+
+
 def _exact_ratio(numerator: float, denominator: float, num_name: str, den_name: str) -> int:
   """Returns `numerator / denominator` as an int, or raises if not exact."""
   ratio = numerator / denominator
@@ -498,6 +564,12 @@ def run_integration_chunked(
     filter_tau: float = 0.0087504,
     filter_order: float = 1.5,
     filter_cutoff: float = 0.8,
+    div_tau: 'units.Quantity | None' = None,
+    div_order: int = 1,
+    vor_tau: 'units.Quantity | None' = None,
+    vor_order: int = 2,
+    temp_tau: 'units.Quantity | None' = None,
+    temp_order: int = 2,
     resume: bool = True,
 ):
   """Runs a long integration in checkpointed chunks.
@@ -538,13 +610,35 @@ def run_integration_chunked(
     total_time: total simulated duration. Must be an exact multiple of
       `checkpoint_every`.
     filter_type: 'exponential' (default -- damping is a function of
-      normalized total wavenumber k=l/lmax, zero below `filter_cutoff`) or
+      normalized total wavenumber k=l/lmax, zero below `filter_cutoff`),
       'horizontal_diffusion' (a del^(2*filter_order) hyperdiffusion, the
       same style Isca's spectral core uses as its sole horizontal damping:
       a pure power law in the actual Laplacian eigenvalue, no cutoff --
       every wavenumber is damped, `filter_tau` is the e-folding time at the
-      truncation limit and `filter_cutoff` is ignored).
-    filter_tau, filter_order, filter_cutoff: spectral filter parameters.
+      truncation limit and `filter_cutoff` is ignored), or
+      'per_field_diffusion' (SPEEDY/ECHAM/jax-gcm style: three independent
+      `horizontal_diffusion`-style filters -- divergence, vorticity,
+      temperature_variation -- each with its own (tau, order) via
+      `div_tau`/`div_order` etc., instead of one filter applied uniformly to
+      the whole state. Divergence defaults to a much shorter timescale/lower
+      order than vorticity/temperature, matching SPEEDY's defaults (2h/12h/
+      24h at del^2/del^4/del^4) -- divergence carries the fast gravity-wave/
+      numerical-noise modes, so damping it hard while leaving the balanced
+      vorticity and temperature comparatively free controls noise without
+      smearing the actual circulation. Also applies
+      `conserve_global_mean_ps_step_filter` (jax-gcm's mass-conservation
+      safeguard). `filter_tau`/`filter_order`/`filter_cutoff` are ignored
+      for this filter_type.
+    filter_tau, filter_order, filter_cutoff: spectral filter parameters,
+      used when filter_type is 'exponential' or 'horizontal_diffusion'.
+    div_tau, vor_tau, temp_tau: per-field damping timescales, used only when
+      filter_type='per_field_diffusion'. Each defaults to SPEEDY's Earth
+      value (2h/12h/24h respectively) if left as `None` -- a starting point
+      calibrated for Earth's rotation rate and resolution, not re-derived
+      for Jupiter, so worth revisiting if this doesn't immediately fix
+      things.
+    div_order, vor_order, temp_order: per-field damping orders (1=del^2,
+      2=del^4, ...), used only when filter_type='per_field_diffusion'.
     resume: if `True` (default) and a matching checkpoint exists, continue
       from it instead of starting over.
 
@@ -634,6 +728,31 @@ def run_integration_chunked(
             dt,
             tau=filter_tau,
             order=filter_order,
+        ),
+    ]
+  elif filter_type == 'per_field_diffusion':
+    div_tau_nondim = physics_specs.nondimensionalize(
+        div_tau if div_tau is not None else 2 * units.hour
+    )
+    vor_tau_nondim = physics_specs.nondimensionalize(
+        vor_tau if vor_tau is not None else 12 * units.hour
+    )
+    temp_tau_nondim = physics_specs.nondimensionalize(
+        temp_tau if temp_tau is not None else 24 * units.hour
+    )
+    filters = [
+        conserve_global_mean_ps_step_filter(),
+        per_field_horizontal_diffusion_step_filter(
+            coords.horizontal, dt, tau=div_tau_nondim, order=div_order,
+            field_name='divergence',
+        ),
+        per_field_horizontal_diffusion_step_filter(
+            coords.horizontal, dt, tau=vor_tau_nondim, order=vor_order,
+            field_name='vorticity',
+        ),
+        per_field_horizontal_diffusion_step_filter(
+            coords.horizontal, dt, tau=temp_tau_nondim, order=temp_order,
+            field_name='temperature_variation',
         ),
     ]
   else:
